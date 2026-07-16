@@ -220,7 +220,7 @@ private class InterruptedIOExceptionInputStream(
 fun Path.newOutputStream(vararg options: OpenOption): OutputStream =
     InterruptedIOExceptionOutputStream(Files.newOutputStream(this, *options))
 
-private class InterruptedIOExceptionOutputStream(
+internal class InterruptedIOExceptionOutputStream(
     outputStream: OutputStream
 ) : DelegateOutputStream(outputStream) {
     @Throws(IOException::class)

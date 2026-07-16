@@ -49,9 +49,22 @@ internal object ForeignCopyMove {
                     emptyArray()
                 }
                 source.newInputStream(*openOptions).use { inputStream ->
-                    val outputStream = target.newOutputStream(
-                        StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
-                    )
+                    val mtimePreservingProvider =
+                        target.provider as? MtimePreservingFileSystemProvider
+                    val outputStream = if (mtimePreservingProvider != null) {
+                        val sourceLastModifiedTime = sourceAttributes.lastModifiedTime()
+                            .takeIf { it != FileTime::class.EPOCH }
+                        InterruptedIOExceptionOutputStream(
+                            mtimePreservingProvider.newOutputStream(
+                                target, sourceLastModifiedTime, StandardOpenOption.CREATE_NEW,
+                                StandardOpenOption.WRITE
+                            )
+                        )
+                    } else {
+                        target.newOutputStream(
+                            StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
+                        )
+                    }
                     var successful = false
                     try {
                         inputStream.copyTo(

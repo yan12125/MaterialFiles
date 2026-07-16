@@ -228,10 +228,17 @@ object Client {
     }
 
     @Throws(DavException::class)
-    fun put(path: Path): OutputStream =
+    fun put(path: Path, lastModifiedTime: Instant? = null): OutputStream =
         try {
+            // https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/basic.html#mtime
+            val headers = if (lastModifiedTime != null) {
+                mapOf("X-OC-MTime" to lastModifiedTime.epochSecond.toString())
+            } else {
+                emptyMap()
+            }
             NotifyEntryModifiedOutputStream(
-                DavResource(getClient(path.authority), path.url).putCompat(), path as Java8Path
+                DavResource(getClient(path.authority), path.url).putCompat(headers = headers),
+                path as Java8Path
             )
         } catch (e: IOException) {
             throw e.toDavException()

@@ -27,10 +27,12 @@ import java8.nio.file.StandardOpenOption
 import java8.nio.file.attribute.BasicFileAttributes
 import java8.nio.file.attribute.FileAttribute
 import java8.nio.file.attribute.FileAttributeView
+import java8.nio.file.attribute.FileTime
 import java8.nio.file.spi.FileSystemProvider
 import me.zhanghai.android.files.provider.common.ByteString
 import me.zhanghai.android.files.provider.common.ByteStringPath
 import me.zhanghai.android.files.provider.common.DelegateSchemeFileSystemProvider
+import me.zhanghai.android.files.provider.common.MtimePreservingFileSystemProvider
 import me.zhanghai.android.files.provider.common.PathListDirectoryStream
 import me.zhanghai.android.files.provider.common.PathObservable
 import me.zhanghai.android.files.provider.common.PathObservableProvider
@@ -52,7 +54,8 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.URI
 
-object WebDavFileSystemProvider : FileSystemProvider(), PathObservableProvider, Searchable {
+object WebDavFileSystemProvider :
+    FileSystemProvider(), PathObservableProvider, Searchable, MtimePreservingFileSystemProvider {
     private val HIDDEN_FILE_NAME_PREFIX = ".".toByteString()
 
     private val fileSystems = mutableMapOf<Authority, WebDavFileSystem>()
@@ -158,7 +161,18 @@ object WebDavFileSystemProvider : FileSystemProvider(), PathObservableProvider, 
     }
 
     @Throws(IOException::class)
-    override fun newOutputStream(file: Path, vararg options: OpenOption): OutputStream {
+    override fun newOutputStream(file: Path, vararg options: OpenOption): OutputStream =
+        newOutputStream(file, null, *options)
+
+    // Allows the caller to preserve a foreign source file's last modified time, which for WebDAV
+    // (unlike other providers) must be known before the PUT request is sent, since it can only be
+    // set via the X-OC-MTime request header. See also MtimePreservingFileSystemProvider.
+    @Throws(IOException::class)
+    override fun newOutputStream(
+        file: Path,
+        lastModifiedTime: FileTime?,
+        vararg options: OpenOption
+    ): OutputStream {
         file as? WebDavPath ?: throw ProviderMismatchException(file.toString())
         val optionsSet = mutableSetOf(*options)
         if (optionsSet.isEmpty()) {
@@ -183,7 +197,7 @@ object WebDavFileSystemProvider : FileSystemProvider(), PathObservableProvider, 
             throw NoSuchFileException(file.toString())
         }
         try {
-            return Client.put(file)
+            return Client.put(file, lastModifiedTime?.toInstant())
         } catch (e: DavException) {
             throw e.toFileSystemException(file.toString())
         }
